@@ -1144,39 +1144,6 @@ function splitLines(s) {
   return lines;
 }
 
-/** Lazy splitLines: same line records, computed on demand. Sequential access
-    (index i, then length as an upper bound) behaves exactly like the eager
-    array, but a scan that stops early never pays for the remaining lines. */
-function splitLinesLazy(s) {
-  const arr = [];
-  const n = s.length;
-  let pos = 0, done = false;
-  const fill = () => {
-    if (pos >= n) {
-      done = true;
-      if (n === 0 || s.charCodeAt(n - 1) === C_NL) arr.push({ start: n, end: n, next: n });
-      return;
-    }
-    const e = lineEnd(s, pos);
-    arr.push({ start: pos, end: e, next: e < n ? e + 1 : n });
-    pos = e + 1;
-    if (e >= n) done = true;
-  };
-  return new Proxy(arr, {
-    get(t, prop) {
-      if (prop === 'length') return t.length + (done ? 0 : 1);
-      if (typeof prop === 'string') {
-        const idx = Number(prop);
-        if (Number.isInteger(idx) && idx >= 0 && String(idx) === prop) {
-          while (t.length <= idx && !done) fill();
-          return t[idx];
-        }
-      }
-      return Reflect.get(t, prop);
-    },
-  });
-}
-
 /** Visual column of offset `to` within line starting `from` (tabs to stops of 4). */
 function colOf(s, from, to) {
   let col = 0;
@@ -1283,7 +1250,7 @@ function scanBlockquote(lex, s) {
   const le0 = lineEnd(s, 0);
   const spG = leadSpaces(s, 0, le0);
   if (spG > 3 || s.charCodeAt(spG) !== C_GT) return null;
-  const lines = splitLinesLazy(s);
+  const lines = splitLines(s);
   const first = lines[0];
   const sp0 = leadSpaces(s, first.start, first.end);
   if (sp0 > 3) return null;
@@ -1526,7 +1493,7 @@ function scanList(lex, s) {
   const le0 = lineEnd(s, 0);
   const spG = leadSpaces(s, 0, le0);
   if (spG > 3 || !matchListMarker(s, spG, le0)) return null;
-  const lines = splitLinesLazy(s);
+  const lines = splitLines(s);
   const L0 = lines[0];
   const sp0 = leadSpaces(s, L0.start, L0.end);
   if (sp0 > 3) return null;
