@@ -2126,12 +2126,13 @@ function lastCloserIdx(mask) {
   const res = { '*': -1, '_': -1, '~': -1 };
   const n = mask.length;
   for (let s = 0; s < n; s++) {
+    const rc = mask.charCodeAt(s);
+    if (rc !== 42 && rc !== 95 && rc !== 126) continue;
     const r = mask[s];
-    if (r !== '*' && r !== '_' && r !== '~') continue;
     let i = s + 1;
-    while (i < n && mask[i] === r) i++;
-    const prev = s === 0 ? '\n' : mask[s - 1];
-    if (prev !== ' ' && prev !== '\t' && prev !== '\n' && prev !== '\r' && prev !== '\f') res[r] = s;
+    while (i < n && mask.charCodeAt(i) === rc) i++;
+    const pc = s === 0 ? 10 : mask.charCodeAt(s - 1);
+    if (pc !== 32 && pc !== 9 && pc !== 10 && pc !== 13 && pc !== 12) res[r] = s;
     s = i - 1;
   }
   return res;
