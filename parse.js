@@ -1770,6 +1770,7 @@ function scanInlineTag(s, i) {
 }
 
 const RE_URL_SCHEME_Y = /(?:[hH][tT][tT][pP][sS]?|[fF][tT][pP]):\/\//y;
+const RE_EMAIL_DOMAIN_Y = /[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/y;
 const RE_URL_EMAIL_Y = /[a-zA-Z0-9.!#$%&'*+/=?_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/y;
 const RE_URL_MAILTO_Y = /(?:mailto:[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])|xmpp:[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])(?:\/[A-Za-z0-9@.]+)?)/y;
 function isEmailLocalCode(c) {
@@ -1819,7 +1820,7 @@ function trimAutolink(text) {
 }
 
 /** Extended autolink at `i`; returns {text, href, end} or null. */
-function scanUrl(s, i, hint) {
+function scanUrl(s, i, emailEnds) {
   const c0 = s.charCodeAt(i);
   if (c0 === 109 || c0 === 120) { // 'm' | 'x': mailto: / xmpp: (case-sensitive)
     RE_URL_MAILTO_Y.lastIndex = i;
@@ -1852,21 +1853,11 @@ function scanUrl(s, i, hint) {
     if (t.length <= 4) return null;
     return { text: t, href: 'http://' + t, end: i + t.length };
   }
-  // email: only possible when the local-part run starting at i ends at '@';
-  // the run end is shared by every position inside the run (hint cache)
-  if (hint.end <= i) {
-    let j = i;
-    while (j < s.length && isEmailLocalCode(s.charCodeAt(j))) j++;
-    hint.end = j; hint.at = s.charCodeAt(j) === 64;
-  }
-  if (hint.at) {
-    RE_URL_EMAIL_Y.lastIndex = i;
-    const m = RE_URL_EMAIL_Y.exec(s);
-    if (m) {
-      const after = s[i + m[0].length];
-      if (after === '-' || after === '_') return null;
-      return { text: m[0], href: 'mailto:' + m[0], end: i + m[0].length };
-    }
+  // email: precomputed per renderInline call (map start -> end), exact because
+  // for a fixed '@' the domain match is independent of the local-part start
+  if (emailEnds) {
+    const ee = emailEnds.get(i);
+    if (ee !== undefined) return { text: s.slice(i, ee), href: 'mailto:' + s.slice(i, ee), end: ee };
   }
   return null;
 }
@@ -2317,8 +2308,33 @@ function markedDel(src, mask, start, nCharIn, lastC) {
   return null;
 }
 
+function buildEmailEnds(src) {
+  const map = new Map();
+  let a = src.indexOf('@');
+  while (a >= 0) {
+    let rs = a;
+    while (rs > 0 && isEmailLocalCode(src.charCodeAt(rs - 1))) rs--;
+    if (rs < a) {
+      RE_EMAIL_DOMAIN_Y.lastIndex = a + 1;
+      const m = RE_EMAIL_DOMAIN_Y.exec(src);
+      if (m) {
+        const end = a + 1 + m[0].length;
+        const after = src[end];
+        if (after !== '-' && after !== '_') {
+          for (let p = rs; p < a; p++) {
+            const c = src.charCodeAt(p);
+            if ((c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)) map.set(p, end);
+          }
+        }
+      }
+    }
+    a = src.indexOf('@', a + 1);
+  }
+  return map;
+}
+
 function renderInline(src, lex, inLink, forAlt) {
-  const urlHint = { end: -1, at: false };
+  const emailEnds = src.includes('@') ? buildEmailEnds(src) : null;
   const nodes = [];
   let text = '';
   let nChar = '';
@@ -2441,7 +2457,9 @@ function renderInline(src, lex, inLink, forAlt) {
       litRange(i, i + run); i += run; continue;
     }
     if (!inLink && !lex.noUrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
-      const u = scanUrl(src, i, urlHint);
+      const cc0 = src.charCodeAt(i);
+      const u = (cc0 === 104 || cc0 === 72 || cc0 === 102 || cc0 === 70 || cc0 === 119 || cc0 === 109 || cc0 === 120 || (emailEnds !== null && emailEnds.has(i)))
+        ? scanUrl(src, i, emailEnds) : null;
       if (u) {
         const clean = encodeHref(u.href);
         if (clean !== null) {
