@@ -1237,6 +1237,9 @@ function paraOpenOf(c) {
 }
 
 function scanBlockquote(lex, s) {
+  const le0 = lineEnd(s, 0);
+  const spG = leadSpaces(s, 0, le0);
+  if (spG > 3 || s.charCodeAt(spG) !== C_GT) return null;
   const lines = splitLines(s);
   const first = lines[0];
   const sp0 = leadSpaces(s, first.start, first.end);
@@ -1477,6 +1480,9 @@ function listBeginBreakStr(str, contentCol) {
 }
 
 function scanList(lex, s) {
+  const le0 = lineEnd(s, 0);
+  const spG = leadSpaces(s, 0, le0);
+  if (spG > 3 || !matchListMarker(s, spG, le0)) return null;
   const lines = splitLines(s);
   const L0 = lines[0];
   const sp0 = leadSpaces(s, L0.start, L0.end);
