@@ -1,3 +1,4 @@
+// Reads MAKEFUN_INPUT_DIR/cases.json, writes MAKEFUN_OUTPUT_DIR/html.json.
 // Driver: reads cases.json, writes html.json (make.fun markdown-render-speed-02).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

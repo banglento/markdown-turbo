@@ -1,3 +1,4 @@
+// parse.js — single-file ES module exporting parse(markdown).
 // Dependency-free Markdown-to-HTML parser whose output is byte-identical
 // to marked 18.1.3 with default options (gfm on, breaks off, pedantic off).
 // Written from scratch for the make.fun markdown-render-speed-02 bounty.
