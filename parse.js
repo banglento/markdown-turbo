@@ -1769,10 +1769,15 @@ function scanInlineTag(s, i) {
   }
 }
 
-const RE_URL_SCHEME = /^(?:[hH][tT][tT][pP][sS]?|[fF][tT][pP]):\/\//;
-const RE_URL_WWW = /^www\./;
-const RE_URL_EMAIL = /^[a-zA-Z0-9.!#$%&'*+/=?_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/;
-const RE_URL_MAILTO = /^(?:mailto:[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])|xmpp:[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])(?:\/[A-Za-z0-9@.]+)?)/;
+const RE_URL_SCHEME_Y = /(?:[hH][tT][tT][pP][sS]?|[fF][tT][pP]):\/\//y;
+const RE_URL_EMAIL_Y = /[a-zA-Z0-9.!#$%&'*+/=?_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+/y;
+const RE_URL_MAILTO_Y = /(?:mailto:[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])|xmpp:[A-Za-z0-9._+-]+@[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![\w-])(?:\/[A-Za-z0-9@.]+)?)/y;
+function isEmailLocalCode(c) {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) ||
+    c === 33 || c === 35 || c === 36 || c === 37 || c === 38 || c === 39 || c === 42 ||
+    c === 43 || c === 45 || c === 46 || c === 47 || c === 61 || c === 63 || c === 94 ||
+    c === 95 || c === 96 || c === 123 || c === 124 || c === 125 || c === 126;
+}
 
 /** Trim an extended-autolink candidate the way GFM/marked backpedal does. */
 const BP_PUNCT = new Set('?!.,:;*_\'"~)'.split(''));
@@ -1815,23 +1820,29 @@ function trimAutolink(text) {
 
 /** Extended autolink at `i`; returns {text, href, end} or null. */
 function scanUrl(s, i) {
-  const rest = s.slice(i);
-  let m = RE_URL_MAILTO.exec(rest);
-  if (m) {
-    const prev = i > 0 ? s[i - 1] : '';
-    if (prev && /[a-zA-Z0-9]/.test(prev)) return null;
-    return { text: m[0], href: m[0], end: i + m[0].length };
+  const c0 = s.charCodeAt(i);
+  if (c0 === 109 || c0 === 120) { // 'm' | 'x': mailto: / xmpp: (case-sensitive)
+    RE_URL_MAILTO_Y.lastIndex = i;
+    const m = RE_URL_MAILTO_Y.exec(s);
+    if (m) {
+      const prev = i > 0 ? s[i - 1] : '';
+      if (prev && /[a-zA-Z0-9]/.test(prev)) return null;
+      return { text: m[0], href: m[0], end: i + m[0].length };
+    }
   }
-  m = RE_URL_SCHEME.exec(rest);
-  if (m) {
-    let j = i;
-    while (j < s.length && !isWs(s.charCodeAt(j)) && s[j] !== '<') j++;
-    const raw = s.slice(i, j);
-    const t = trimAutolink(raw);
-    if (t.length <= m[0].length) return null;
-    return { text: t, href: t, end: i + t.length };
+  if (c0 === 104 || c0 === 72 || c0 === 102 || c0 === 70) { // h H f F
+    RE_URL_SCHEME_Y.lastIndex = i;
+    const m = RE_URL_SCHEME_Y.exec(s);
+    if (m) {
+      let j = i;
+      while (j < s.length && !isWs(s.charCodeAt(j)) && s[j] !== '<') j++;
+      const raw = s.slice(i, j);
+      const t = trimAutolink(raw);
+      if (t.length <= m[0].length) return null;
+      return { text: t, href: t, end: i + t.length };
+    }
   }
-  if (RE_URL_WWW.test(rest)) {
+  if (c0 === 119 && s.startsWith('www.', i)) { // 'w'
     const prev = i > 0 ? s[i - 1] : null;
     if (prev !== null && !/[\s*_~(]/.test(prev)) return null;
     let j = i;
@@ -1839,14 +1850,19 @@ function scanUrl(s, i) {
     const raw = s.slice(i, j);
     const t = trimAutolink(raw);
     if (t.length <= 4) return null;
-    // must contain a dot after www. with something following
     return { text: t, href: 'http://' + t, end: i + t.length };
   }
-  m = RE_URL_EMAIL.exec(rest);
-  if (m) {
-    const after = s[i + m[0].length];
-    if (after === '-' || after === '_') return null;
-    return { text: m[0], href: 'mailto:' + m[0], end: i + m[0].length };
+  // email: only possible when the local-part run starting at i ends at '@'
+  let j = i;
+  while (j < s.length && isEmailLocalCode(s.charCodeAt(j))) j++;
+  if (j > i && s.charCodeAt(j) === 64) {
+    RE_URL_EMAIL_Y.lastIndex = i;
+    const m = RE_URL_EMAIL_Y.exec(s);
+    if (m) {
+      const after = s[i + m[0].length];
+      if (after === '-' || after === '_') return null;
+      return { text: m[0], href: 'mailto:' + m[0], end: i + m[0].length };
+    }
   }
   return null;
 }
