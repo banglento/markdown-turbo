@@ -831,19 +831,21 @@ function appendToText(tok, addText, addRaw) {
 }
 
 function blockTokens(lex, src, tokens, merge) {
-  while (src.length > 0) {
+  const n = src.length;
+  let pos = 0;
+  while (pos < n) {
     let m;
-    const spaceEnd = scanSpace(src, 0);
-    if (spaceEnd > 0) {
-      const raw = src.slice(0, spaceEnd);
-      src = src.slice(spaceEnd);
+    const spaceEnd = scanSpace(src, pos);
+    if (spaceEnd > pos) {
+      const raw = src.slice(pos, spaceEnd);
+      pos = spaceEnd;
       const last = tokens[tokens.length - 1];
       if (raw.length === 1 && last !== undefined) last.raw += '\n';
       else tokens.push({ type: 'space', raw });
       continue;
     }
-    if ((m = scanIndentedCode(src, 0))) {
-      src = src.slice(m.raw.length);
+    if ((m = scanIndentedCode(src, pos))) {
+      pos += m.raw.length;
       const last = tokens[tokens.length - 1];
       if (last && (last.type === 'paragraph' || last.type === 'text')) {
         appendToText(last, m.text, m.raw);
@@ -852,39 +854,47 @@ function blockTokens(lex, src, tokens, merge) {
       }
       continue;
     }
-    if ((m = scanFence(src, 0))) {
-      src = src.slice(m.raw.length);
+    if ((m = scanFence(src, pos))) {
+      pos += m.raw.length;
       tokens.push({ type: 'code', raw: m.raw, text: m.text, lang: m.lang });
       continue;
     }
-    if ((m = scanHeading(src, 0))) {
-      tokens.push({ type: 'heading', raw: src.slice(0, m.rawEnd), depth: m.depth, text: m.text });
-      src = src.slice(m.rawEnd);
+    if ((m = scanHeading(src, pos))) {
+      tokens.push({ type: 'heading', raw: src.slice(pos, m.rawEnd), depth: m.depth, text: m.text });
+      pos = m.rawEnd;
       continue;
     }
-    const hrEnd = scanHr(src, 0);
+    const hrEnd = scanHr(src, pos);
     if (hrEnd >= 0) {
-      tokens.push({ type: 'hr', raw: src.slice(0, hrEnd) });
-      src = src.slice(hrEnd);
+      tokens.push({ type: 'hr', raw: src.slice(pos, hrEnd) });
+      pos = hrEnd;
       continue;
     }
-    if ((m = scanBlockquote(lex, src))) {
-      src = src.slice(m.len);
-      tokens.push(m.token);
-      continue;
+    {
+      const le = lineEnd(src, pos);
+      const sp = leadSpaces(src, pos, le);
+      if (sp <= 3 && src.charCodeAt(pos + sp) === C_GT) {
+        if ((m = scanBlockquote(lex, src.slice(pos)))) {
+          pos += m.len;
+          tokens.push(m.token);
+          continue;
+        }
+      }
+      if (sp <= 3 && matchListMarker(src, pos + sp, le)) {
+        if ((m = scanList(lex, src.slice(pos)))) {
+          pos += m.len;
+          tokens.push(m.token);
+          continue;
+        }
+      }
     }
-    if ((m = scanList(lex, src))) {
-      src = src.slice(m.len);
-      tokens.push(m.token);
-      continue;
-    }
-    if ((m = scanHtmlBlock(src, 0))) {
-      src = src.slice(m.consumed);
+    if ((m = scanHtmlBlock(src, pos))) {
       tokens.push({ type: 'html', block: true, raw: m.raw, pre: m.pre, text: m.raw });
+      pos = m.consumed;
       continue;
     }
-    if ((m = scanDefinition(src, 0))) {
-      src = src.slice(m.consumed);
+    if ((m = scanDefinition(src, pos))) {
+      pos = m.consumed;
       const last = tokens[tokens.length - 1];
       if (last && (last.type === 'paragraph' || last.type === 'text')) {
         appendToText(last, m.raw, m.raw);
@@ -894,20 +904,20 @@ function blockTokens(lex, src, tokens, merge) {
       }
       continue;
     }
-    if ((m = scanTable(src, 0))) {
-      src = src.slice(m.consumed);
+    if ((m = scanTable(src, pos))) {
+      pos = m.consumed;
       tokens.push({ type: 'table', raw: m.raw, header: m.header, aligns: m.aligns, rows: m.rows });
       continue;
     }
-    if ((m = scanSetext(src, 0))) {
-      src = src.slice(m.consumed);
+    if ((m = scanSetext(src, pos))) {
+      pos = m.consumed;
       tokens.push({ type: 'heading', raw: m.raw, depth: m.depth, text: m.text });
       continue;
     }
     if (lex.top) {
-      const pEnd = scanParagraph(src, 0);
-      if (pEnd > 0) {
-        const raw = src.slice(0, pEnd);
+      const pEnd = scanParagraph(src, pos);
+      if (pEnd > pos) {
+        const raw = src.slice(pos, pEnd);
         let text = raw;
         if (text.charCodeAt(text.length - 1) === C_NL) text = text.slice(0, -1);
         const last = tokens[tokens.length - 1];
@@ -916,20 +926,20 @@ function blockTokens(lex, src, tokens, merge) {
         } else {
           tokens.push({ type: 'paragraph', raw, text });
         }
-        src = src.slice(pEnd);
+        pos = pEnd;
         continue;
       }
     }
-    const le = lineEnd(src, 0);
-    if (le > 0) {
-      const raw = src.slice(0, le);
-      src = src.slice(le);
+    const le = lineEnd(src, pos);
+    if (le > pos) {
+      const raw = src.slice(pos, le);
+      pos = le;
       const last = tokens[tokens.length - 1];
       if (last && last.type === 'text') appendToText(last, raw, raw);
       else tokens.push({ type: 'text', raw, text: raw });
       continue;
     }
-    src = src.slice(1);
+    pos += 1;
   }
   return tokens;
 }
