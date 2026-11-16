@@ -2325,7 +2325,11 @@ function renderInline(src, lex, inLink, forAlt) {
   const hasEm = src.includes('*') || src.includes('_');
   const mask = hasEm ? buildMask(src, lex) : src;
   const lastC = hasEm ? lastCloserIdx(mask) : { '*': -1, '_': -1 };
-  const flush = () => { if (text) { nChar = text[text.length - 1]; nodes.push({ t: 'text', s: text }); text = ''; } };
+  let segStart = -1, segEnd = -1;
+  const flushSeg = () => { if (segStart >= 0) { text += src.slice(segStart, segEnd); segStart = -1; segEnd = -1; } };
+  const litAt = (p) => { if (segEnd === p) segEnd = p + 1; else { flushSeg(); segStart = p; segEnd = p + 1; } };
+  const litRange = (a, b) => { if (segEnd === a) segEnd = b; else { flushSeg(); segStart = a; segEnd = b; } };
+  const flush = () => { flushSeg(); if (text) { nChar = text[text.length - 1]; nodes.push({ t: 'text', s: text }); text = ''; } };
   const pushHtml = (html) => { flush(); nodes.push({ t: 'raw', s: html }); nChar = ''; };
   let i = 0;
   const n = src.length;
@@ -2339,16 +2343,16 @@ function renderInline(src, lex, inLink, forAlt) {
           if (forAlt) { flush(); nodes.push({ t: 'rawtext', s: nx }); }
           else pushHtml(esc(nx, false));
         }
-        else text += nx;
+        else litAt(i + 1);
         i += 2; continue;
       }
-      text += c; i++; continue;
+      litAt(i); i++; continue;
     }
     if (c === '`') {
       let run = 0;
       while (src[i + run] === '`') run++;
       const close = findCodeClose(src, i + run, run);
-      if (close < 0) { text += src.slice(i, i + run); i += run; continue; }
+      if (close < 0) { litRange(i, i + run); i += run; continue; }
       let content = src.slice(i + run, close);
       content = content.replace(/\n/g, ' ');
       if (content.length >= 2 && content[0] === ' ' && content[content.length - 1] === ' ' && /[^ ]/.test(content)) {
@@ -2362,14 +2366,14 @@ function renderInline(src, lex, inLink, forAlt) {
     if (c === '!' && src[i + 1] === '[') {
       const r = tryLink(src, i + 1, true, lex, inLink, forAlt);
       if (r) { pushHtml(r.html); i = r.end; continue; }
-      text += '!'; i++; continue;
+      litAt(i); i++; continue;
     }
     if (c === '[') {
       if (!inLink || forAlt) {
         const r = tryLink(src, i, false, lex, inLink, forAlt);
         if (r) { pushHtml(r.html); i = r.end; continue; }
       }
-      text += '['; i++; continue;
+      litAt(i); i++; continue;
     }
     if (c === '<') {
       const rest = src.slice(i, i + 1024);
@@ -2396,7 +2400,7 @@ function renderInline(src, lex, inLink, forAlt) {
         if (!forAlt) pushHtml(tagText);
         i = tagEnd; continue;
       }
-      text += '<'; i++; continue;
+      litAt(i); i++; continue;
     }
     if (c === '*' || c === '_') {
       flush();
@@ -2408,7 +2412,7 @@ function renderInline(src, lex, inLink, forAlt) {
         i = r.end;
         continue;
       }
-      text += c; i++; continue;
+      litAt(i); i++; continue;
     }
     if (c === '~') {
       flush();
@@ -2420,7 +2424,7 @@ function renderInline(src, lex, inLink, forAlt) {
         i = r.end;
         continue;
       }
-      text += c; i++; continue;
+      litAt(i); i++; continue;
     }
     if (c === ' ') {
       let run = 0;
@@ -2434,7 +2438,7 @@ function renderInline(src, lex, inLink, forAlt) {
           continue;
         }
       }
-      text += src.slice(i, i + run); i += run; continue;
+      litRange(i, i + run); i += run; continue;
     }
     if (!inLink && !lex.noUrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
       const u = scanUrl(src, i, urlHint);
@@ -2447,7 +2451,7 @@ function renderInline(src, lex, inLink, forAlt) {
         }
       }
     }
-    text += c; i++;
+    litAt(i); i++;
   }
   flush();
   processDelims(nodes);
