@@ -2405,7 +2405,8 @@ function renderInline(src, lex, inLink, forAlt) {
   const n = src.length;
   while (i < n) {
     const c = src[i];
-    if (c === '\\') {
+    const cc = src.charCodeAt(i);
+    if (cc === 92) {
       const nx = src[i + 1];
       if (nx === '\n') { if (!forAlt) pushHtml('<br>'); i += 2; while (i < n && (src[i] === ' ' || src[i] === '\t')) i++; continue; }
       if (nx !== undefined && ASCII_PUNCT.has(nx)) {
@@ -2418,7 +2419,7 @@ function renderInline(src, lex, inLink, forAlt) {
       }
       litAt(i); i++; continue;
     }
-    if (c === '`') {
+    if (cc === 96) {
       let run = 0;
       while (src[i + run] === '`') run++;
       const close = findCodeClose(src, i + run, run);
@@ -2433,19 +2434,19 @@ function renderInline(src, lex, inLink, forAlt) {
       i = close + run;
       continue;
     }
-    if (c === '!' && src[i + 1] === '[') {
+    if (cc === 33 && src[i + 1] === '[') {
       const r = tryLink(src, i + 1, true, lex, inLink, forAlt);
       if (r) { pushHtml(r.html); i = r.end; continue; }
       litAt(i); i++; continue;
     }
-    if (c === '[') {
+    if (cc === 91) {
       if (!inLink || forAlt) {
         const r = tryLink(src, i, false, lex, inLink, forAlt);
         if (r) { pushHtml(r.html); i = r.end; continue; }
       }
       litAt(i); i++; continue;
     }
-    if (c === '<') {
+    if (cc === 60) {
       const rest = src.slice(i, i + 1024);
       let m = RE_AUTOLINK_SCHEME.exec(rest);
       if (m) {
@@ -2472,7 +2473,7 @@ function renderInline(src, lex, inLink, forAlt) {
       }
       litAt(i); i++; continue;
     }
-    if (c === '*' || c === '_') {
+    if (cc === 42 || cc === 95) {
       flush();
       const r = markedEmStrong(src, mask, i, nChar, lastC);
       if (r) {
@@ -2484,7 +2485,7 @@ function renderInline(src, lex, inLink, forAlt) {
       }
       litAt(i); i++; continue;
     }
-    if (c === '~') {
+    if (cc === 126) {
       flush();
       const r = markedDel(src, mask, i, nChar, lastC);
       if (r) {
@@ -2496,7 +2497,7 @@ function renderInline(src, lex, inLink, forAlt) {
       }
       litAt(i); i++; continue;
     }
-    if (c === ' ') {
+    if (cc === 32) {
       let run = 0;
       while (src[i + run] === ' ') run++;
       if (run >= 2 && src[i + run] === '\n') {
@@ -2510,9 +2511,8 @@ function renderInline(src, lex, inLink, forAlt) {
       }
       litRange(i, i + run); i += run; continue;
     }
-    if (!inLink && !lex.noUrl && ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) {
-      const cc0 = src.charCodeAt(i);
-      const u = (cc0 === 104 || cc0 === 72 || cc0 === 102 || cc0 === 70 || cc0 === 119 || cc0 === 109 || cc0 === 120 || (emailEnds !== null && emailEnds.has(i)))
+    if (!inLink && !lex.noUrl && ((cc >= 97 && cc <= 122) || (cc >= 65 && cc <= 90) || (cc >= 48 && cc <= 57))) {
+      const u = (cc === 104 || cc === 72 || cc === 102 || cc === 70 || cc === 119 || cc === 109 || cc === 120 || (emailEnds !== null && emailEnds.has(i)))
         ? scanUrl(src, i, emailEnds) : null;
       if (u) {
         const clean = encodeHref(u.href);
