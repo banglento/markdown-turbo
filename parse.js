@@ -2053,7 +2053,9 @@ function maskLinkInText(e, lex) {
 /** marked's emStrong mask: reflink pass, punctuation/code pass, block-skip pass. */
 function buildMask(src, lex) {
   let t = src;
-  if (t.includes('[')) {
+  let anyLink = false;
+  for (const k in lex.links) { anyLink = true; break; }
+  if (anyLink && t.includes('[')) {
     const s = (r) => {
       const o = r.lastIndexOf('[');
       if (!lex.links[labelKey(r.slice(o + 1, -1))]) return r;
@@ -2067,8 +2069,12 @@ function buildMask(src, lex) {
     };
     t = t.replace(REFLINK_SEARCH_RE, s);
   }
-  t = t.replace(MASK_PUNCT_RE, (m, g1, g2) => g2 ? '+'.repeat(m.length) : g1 ? g1 + m.slice(g1.length, -g1.length).replace(/`/g, '+') + g1 : m);
-  t = t.replace(MASK_SKIP_RE, (m) => '[' + 'a'.repeat(Math.max(0, m.length - 2)) + ']');
+  if (t.includes('`') || t.includes('\\')) {
+    t = t.replace(MASK_PUNCT_RE, (m, g1, g2) => g2 ? '+'.repeat(m.length) : g1 ? g1 + m.slice(g1.length, -g1.length).replace(/`/g, '+') + g1 : m);
+  }
+  if (t.includes('[') || t.includes('`') || t.includes('<')) {
+    t = t.replace(MASK_SKIP_RE, (m) => '[' + 'a'.repeat(Math.max(0, m.length - 2)) + ']');
+  }
   return t;
 }
 
