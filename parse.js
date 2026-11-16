@@ -2339,7 +2339,11 @@ function buildEmailEnds(src) {
   return map;
 }
 
+const RE_INLINE_SPECIAL = /[\\`!\[<*_~@]| {2}\n|www\.|mailto:|xmpp:|[hH][tT][tT][pP][sS]?:\/\/|[fF][tT][pP]:\/\//;
 function renderInline(src, lex, inLink, forAlt) {
+  if (!RE_INLINE_SPECIAL.test(src)) {
+    return forAlt ? decodeEntities(src) : esc(decodeEntities(src), false);
+  }
   const emailEnds = src.includes('@') ? buildEmailEnds(src) : null;
   const nodes = [];
   let text = '';
